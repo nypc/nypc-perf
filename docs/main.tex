@@ -1,10 +1,9 @@
 \documentclass{article}
-\usepackage{graphicx} % Required for inserting images
 \usepackage{kotex}
 \usepackage[style=numeric]{biblatex}
 \usepackage{amsmath}
-\addbibresource{references.bib} % use the name of your .bib file
-
+\usepackage{hyperref}
+\addbibresource{references.bib} 
 \newcommand{\Prf}[1]{\Pr(#1)}
 
 \title{NYPC Code Battle 퍼포먼스 시스템}
@@ -29,8 +28,7 @@ $$\Prf{i > j} = \frac{\pi_i}{\pi_i + \pi_j} $$
 
 \subsection{중간평가의 퍼포먼스}
 
-우리는 한 가지의 가정 $\log (\pi_i) \sim Z$를 더 추가해서, 참가자들의 실력을 정규분포에 맞게 배치하려고 합니다.
-
+우리는 한 가지의 가정 $\log (\pi_i) \sim Z$를 더 추가해서, 참가자들의 실력을 정규분포에 맞게 배치하려고 합니다. 여기서, 샘플 AI의 퍼포먼스는 $1$로 고정합니다.
 
 $w_{ij}$를 $i$가 $j$를 이긴 횟수라고 할때, log-likelihood는 다음과 같습니다.
 
@@ -100,7 +98,7 @@ f(\lambda) & = \lambda - g(\lambda)
 이제 새로운 $\beta_i' $를 $\beta_i - \frac{f(\beta_i)}{f'(\beta_i)}$로 대체하는 것을 원하는 정밀도가 될 때까지 반복합니다. 
 
 \section{퍼포먼스 표시}
-계산이 끝난 이후 $\pi_i$의 값에 대해 $p_i = 1500 + 400 \pi_i$를 계산하고, $P_i$를 $50$의 배수 (샘플 AI와의 퍼포먼스) 혹은 $10$의 배수 (중간평가의 퍼포먼스) 단위로 보여줍니다. 
+계산이 끝난 이후 $\beta_i$의 값에 대해 $p_i = 1500 + 400 \beta_i$를 계산하고, $P_i$를 $50$의 배수 (샘플 AI와의 퍼포먼스) 혹은 $10$의 배수 (중간평가의 퍼포먼스) 단위로 보여줍니다. 
 
 \begin{equation*}
 P_i =
@@ -110,6 +108,10 @@ p_i & \text{if  } 300 \le p_i \le 2700 \\
 2700 + 400\log ( 1 + (p_i-2700)/400) & \text{if  } p_i > 2700 
 \end{cases}
 \end{equation*}
+
+\section{구현}
+
+사용할 수 있는 Rust 및 node.js 라이브러리 형태로 \url{https://github.com/nypc/nypc-perf}에 구현되어있습니다.
 
 \printbibliography
 

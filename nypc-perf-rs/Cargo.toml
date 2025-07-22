@@ -1,0 +1,17 @@
+[package]
+name = "nypc-perf"
+version = "0.1.2"
+authors = ["NEXON Algorithm Research Team <_algorithm@nexon.co.kr>"]
+edition = "2024"
+description = "Performance calculation of NYPC"
+license = "MIT"
+repository = "https://github.com/nypc/nypc-perf"
+documentation = "https://docs.rs/nypc-perf"
+keywords = ["rating", "performance", "nypc"]
+readme = "README.md"
+
+[dependencies]
+
+[dev-dependencies]
+rand = "0.9.1"
+rand_distr = "0.5.1"

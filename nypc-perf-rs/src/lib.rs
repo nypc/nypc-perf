@@ -1,13 +1,13 @@
 //! A library for calculating player performance ratings based on battle results.
 //!
-//! This library implements a Bradley-Terry model based rating system that estimates player performance
+//! This library implements a Bradley-Terry model based performance system that estimates player performance
 //! levels from head-to-head battle outcomes. The algorithm uses Newton-Raphson iteration to find
 //! maximum likelihood estimates of player ratings that best explain the observed win/loss patterns.
 //!
 //! # Usage
 //!
 //! ```rust
-//! use nypc_perf::{BattleResult, PerfCalc};
+//! use nypc_perf::{BattleResult, PerfCalc, Rating};
 //!
 //! // Create battle results between players
 //! let battles = vec![
@@ -16,11 +16,17 @@
 //!         j: 1,           // Player 1
 //!         wij: 2.0,       // Player 0 won twice against Player 1
 //!         wji: 1.0,       // Player 1 won once against Player 0
+//!     },
+//!     BattleResult {
+//!         i: 0,
+//!         j: 2,
+//!         wij: 1.0,
+//!         wji: 0.0,
 //!     }
 //! ];
 //!
 //! // Initialize performance ratings to 0
-//! let mut perf = vec![0.0, 0.0];
+//! let mut perf = vec![Rating::new(0.0), Rating::new(0.0), Rating::new_fixed(0.0)];
 //!
 //! // Run the rating calculation
 //! let result = PerfCalc::new()
@@ -69,6 +75,28 @@ pub struct BattleResult {
     pub wji: f64,
 }
 
+/// Represents a player's rating.
+/// If fixed, the value is fixed and cannot be changed.
+/// If not fixed, the value is a variable and can be changed.
+/// The value is the log-performance rating of the player.
+#[derive(Debug, Clone, Copy)]
+pub struct Rating {
+    pub fixed: bool,
+    pub value: f64,
+}
+
+impl Rating {
+    pub fn new(value: f64) -> Self {
+        Self {
+            fixed: false,
+            value,
+        }
+    }
+    pub fn new_fixed(value: f64) -> Self {
+        Self { fixed: true, value }
+    }
+}
+
 /// Calculates new beta values based on current beta values and battle results.
 ///
 /// # Arguments
@@ -77,15 +105,15 @@ pub struct BattleResult {
 ///
 /// # Returns
 /// Vector of new beta values after one Newton-Raphson iteration
-fn iterate(beta: &[f64], battles: impl IntoIterator<Item = BattleResult>) -> Vec<f64> {
+fn iterate(beta: &[Rating], battles: impl IntoIterator<Item = BattleResult>) -> Vec<Rating> {
     let n = beta.len();
     let mut f = vec![0.0; n];
     let mut df = vec![0.0; n];
 
     // Pre-calculate sums for each player
     for BattleResult { i, j, wij, wji } in battles {
-        let eji = (beta[j] - beta[i]).exp();
-        let eij = (beta[i] - beta[j]).exp();
+        let eji = (beta[j].value - beta[i].value).exp();
+        let eij = (beta[i].value - beta[j].value).exp();
         f[i] += (eji * wij - wji) / (1.0 + eji);
         df[i] += (eji * (wij + wji)) / ((1.0 + eji) * (1.0 + eji));
         f[j] += (eij * wji - wij) / (1.0 + eij);
@@ -95,7 +123,14 @@ fn iterate(beta: &[f64], battles: impl IntoIterator<Item = BattleResult>) -> Vec
     // Apply Newton-Raphson iteration for each player
     beta.iter()
         .zip(f.iter().zip(&df))
-        .map(|(b, (f, df))| b - (b - f) / (1.0 + df))
+        .map(|(b, (f, df))| Rating {
+            fixed: b.fixed,
+            value: if b.fixed {
+                b.value
+            } else {
+                b.value - (b.value - f) / (1.0 + df)
+            },
+        })
         .collect()
 }
 
@@ -108,8 +143,8 @@ fn iterate(beta: &[f64], battles: impl IntoIterator<Item = BattleResult>) -> Vec
 /// # Example
 ///
 /// ```rust
-/// use nypc_perf::{BattleResult, PerfCalc};
-/// let mut perf = vec![0.0; 2];
+/// use nypc_perf::{BattleResult, PerfCalc, Rating};
+/// let mut perf = vec![Rating::new(0.0); 2];
 /// let battles = vec![
 ///     BattleResult {
 ///         i: 0,
@@ -174,7 +209,7 @@ impl PerfCalc {
     /// # Returns
     /// Ok(iterations) if convergence is reached within max_iterations,
     /// or Err(final_error) if not converged.
-    pub fn run(self, perf: &mut [f64], battles: &[BattleResult]) -> Result<usize, f64> {
+    pub fn run(self, perf: &mut [Rating], battles: &[BattleResult]) -> Result<usize, f64> {
         let mut err = f64::NAN;
         for i in 0..self.num_iters {
             let new_perf = iterate(perf, battles.iter().copied());
@@ -182,7 +217,7 @@ impl PerfCalc {
             err = new_perf
                 .iter()
                 .zip(perf.iter())
-                .map(|(a, b)| (a - b).abs())
+                .map(|(a, b)| (a.value - b.value).abs())
                 .max_by(|a, b| a.partial_cmp(b).unwrap())
                 .unwrap();
             perf.copy_from_slice(&new_perf);
@@ -203,18 +238,27 @@ mod tests {
 
     #[test]
     fn test_simple() {
-        let battles = vec![BattleResult {
-            i: 0,
-            j: 1,
-            wij: 2.0,
-            wji: 1.0,
-        }];
+        let battles = vec![
+            BattleResult {
+                i: 0,
+                j: 1,
+                wij: 2.0,
+                wji: 1.0,
+            },
+            BattleResult {
+                i: 0,
+                j: 2,
+                wij: 1.0,
+                wji: 0.0,
+            },
+        ];
 
-        let mut perf = vec![0.0, 0.0];
+        let mut perf = vec![Rating::new(0.0), Rating::new(0.0), Rating::new_fixed(0.0)];
         let res = PerfCalc::new().epsilon(1e-6).run(&mut perf, &battles);
         assert!(res.is_ok());
-        assert!((perf[0] - 0.20161262).abs() < 1e-6);
-        assert!((perf[1] - (-0.20161262)).abs() < 1e-6);
+        assert!((perf[0].value - 0.473034477).abs() < 1e-6);
+        assert!((perf[1].value - (-0.0891364)).abs() < 1e-6);
+        assert!((perf[2].value - 0.0).abs() < 1e-6);
     }
 
     #[test]
@@ -254,7 +298,7 @@ mod tests {
             }
         }
 
-        let mut perf = vec![0.0; N];
+        let mut perf = vec![Rating::new(0.0); N];
         eprintln!(
             "Convergence (Non-merged): {:?}",
             PerfCalc::new()
@@ -263,7 +307,7 @@ mod tests {
                 .unwrap()
         );
 
-        let mut perf_merge = vec![0.0; N];
+        let mut perf_merge = vec![Rating::new(0.0); N];
         eprintln!(
             "Convergence (Merged): {:?}",
             PerfCalc::new()
@@ -273,7 +317,7 @@ mod tests {
         );
 
         for (p, q) in perf.iter().zip(perf_merge.iter()) {
-            assert!((p - q).abs() < 1e-6);
+            assert!((p.value - q.value).abs() < 1e-6);
         }
     }
 
@@ -299,7 +343,7 @@ mod tests {
             battles.push(BattleResult { i, j, wij, wji });
         }
 
-        let mut perf = vec![0.0; N];
+        let mut perf = vec![Rating::new(0.0); N];
 
         let start = std::time::Instant::now();
         let res = PerfCalc::new()
@@ -314,14 +358,14 @@ mod tests {
         let sqrt_mse = (real_perf
             .iter()
             .zip(perf.iter())
-            .map(|(r, p)| (r - p).powi(2))
+            .map(|(r, p)| (r - p.value).powi(2))
             .sum::<f64>()
             / N as f64)
             .sqrt();
         let mx_diff = real_perf
             .iter()
             .zip(perf.iter())
-            .map(|(r, p)| (r - p).abs())
+            .map(|(r, p)| (r - p.value).abs())
             .max_by(|a, b| a.total_cmp(b))
             .unwrap();
         eprintln!("MSE: {}", sqrt_mse);
